@@ -1,0 +1,100 @@
+service: dferrel-extracredit2
+
+plugins:
+  - serverless-deployment-bucket
+  - serverless-add-api-key
+
+custom:
+  apiKeys:
+    - name: ${self:service}-freemium
+      value: qwertyuiopasdfghjklz2
+    - name: ${self:service}-premium
+      value: zlkjhgfdsapoiuytrewq2
+
+provider:
+  name: aws
+  region: us-east-1
+  deploymentBucket:
+    name: serverless-deploys-sandbox-05102019
+    serverSideEncryption: AES256
+  runtime: python3.9
+  deploymentMethod: direct
+  stage: sandbox
+  apiKeys:
+    -  ${self:service}-freemium
+    -  ${self:service}-premium
+  vpc:
+    securityGroupIds:
+      - !Ref LambdaSecurityGroup
+    subnetIds:
+      - subnet-09a9e4b5adb41cecf
+      - subnet-07da2587cb2479058
+  apiGateway:
+    minimumCompressionSize: 1024
+    shouldStartNameWithService: true
+    resourcePolicy:
+      - Effect: Deny
+        Principal: "*"
+        Action: execute-api:Invoke
+        Resource:
+          - execute-api:/*/*/*
+        Condition:
+          NotIpAddress:
+            aws:SourceIp: 
+              - "208.53.195.66/32" #xDT vpn
+              - "50.202.73.0/24" #xPV vpn
+      - Effect: Allow
+        Principal: '*'
+        Action: execute-api:Invoke
+        Resource:
+          - execute-api:/*/*/*
+  s3:
+    requestFileBucket:
+      name: dferrel-extracredbucket
+      accessControl: Private
+      bucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      publicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+  iamRoleStatements:
+    - Effect: 'Allow'
+      Action:
+        - s3:PutObject
+      Resource:
+        - arn:aws:s3:::dferrel-extracredbucket/*
+
+functions:
+  todos:
+    handler: handler.handler
+    events:
+      - http:
+          path: todos
+          method: get
+          private: true
+resources:
+  Resources:
+    requestFileBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        AccessControl: Private
+        BucketName: dferrel-extracredbucket
+        VersioningConfiguration:
+          Status: Enabled
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+    LambdaSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupDescription: Security group for lambdas. Allow all egress and no ingress
+        VpcId: vpc-9a7015e0
+        Tags:
+          - Key: Name
+            Value: ${self:service}-lambda-sg
